@@ -67,6 +67,11 @@ namespace ModLoader
             return this.modList;
         }
 
+        void Update()
+        {
+            Loader.logger.proccessQueue();
+        }
+
         void OnEnable()
         {
             SceneManager.sceneLoaded += OnSceneLoaded;
@@ -109,16 +114,16 @@ namespace ModLoader
 
             try
             {
-                logger.log("Loading " + mod.getModName(), mod.getModAuthor());
+                logger.log("Loading " + mod.getModName(), mod.getModName());
 
                 // execute entry point of mod
                 mod.load();
-                logger.log("Loaded " + mod.getModName(), mod.getModAuthor());
+                logger.log("Loaded " + mod.getModName(), mod.getModName());
                 this.modList.AddItem(mod);
             }
             catch( Exception e)
             {
-                logger.log("Error loading " + mod.getModName(), mod.getModAuthor());
+                logger.log("Error loading " + mod.getModName(), mod.getModName());
                 logger.logError(e);
             }
         }

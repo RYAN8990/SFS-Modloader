@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using SFS.IO;
+using System.Collections.Generic;
 
 namespace ModLoader
 {
@@ -19,7 +20,19 @@ namespace ModLoader
 		[DllImport("Kernel32.dll")]
 		private static extern bool AllocConsole();
 
-		private static FilePath logFile;
+		// in this files all logs will be saved
+		private FilePath logFile;
+
+		private const int SW_HIDE = 0;
+
+		private const int SW_SHOW = 5;
+
+		// this indicate if the console is visible or not
+		private bool visible = false;
+
+		// the log queue 
+		private Queue<Log> logs = new Queue<Log>();
+
 
 		public ModConsole()
 		{
@@ -28,36 +41,32 @@ namespace ModLoader
 			{
 				AutoFlush = true
 			});
+
 			this.visible = true;
 			DateTime current = new DateTime();
-			ModConsole.logFile = FileLocations.BaseFolder.Extend("logs").CreateFolder().ExtendToFile(current.Year + "-" + current.Month + "-" + current.Day+".txt");
+			this.logFile = FileLocations.BaseFolder.Extend("logs").CreateFolder().ExtendToFile(current.Year + "-" + current.Month + "-" + current.Day+".txt");
 		}
 
-		private void hideConsole()
-		{
-			ModConsole.ShowWindow(ModConsole.GetConsoleWindow(), 0);
-			this.visible = false;
-		}
-
-		private void showConsole()
-		{
-			ModConsole.ShowWindow(ModConsole.GetConsoleWindow(), 5);
-			this.visible = true;
-		}
-
+		/// <summary>
+		/// This functions cahnge visible status of console
+		/// </summary>
 		public void toggleConsole()
 		{
-			bool flag = this.visible;
-			if (flag)
+			if (this.visible)
 			{
-				this.hideConsole();
+				ModConsole.ShowWindow(ModConsole.GetConsoleWindow(), SW_HIDE);
 			}
 			else
 			{
-				this.showConsole();
+				ModConsole.ShowWindow(ModConsole.GetConsoleWindow(), SW_SHOW);
 			}
+			this.visible = !this.visible;
 		}
 
+		/// <summary>
+		/// If you need log a Esception in your mod
+		/// </summary>
+		/// <param name="e">Escpetion object</param>
 		public void logError(Exception e)
 		{
 			StackTrace stackTrace = new StackTrace(e, true);
@@ -65,63 +74,79 @@ namespace ModLoader
 			int fileColumnNumber = frame.GetFileColumnNumber();
 			int fileLineNumber = frame.GetFileLineNumber();
 			string fileName = frame.GetFileName();
-			this.tryLogCustom("##[ERROR]##", "ErrorReporter", LogType.Error);
-			this.tryLogCustom(e.Message , "ErrorReporter", LogType.Error);
-			this.tryLogCustom(e.StackTrace, "ErrorReporter", LogType.Error);
-			this.tryLogCustom(fileLineNumber+":"+ fileColumnNumber + "@" + fileName, "ErrorReporter", LogType.Error);
-			this.tryLogCustom("##[ERROR]##", "ErrorReporter", LogType.Error);
+			this.log("##[ERROR]##", "ErrorReporter", LogType.Error);
+			this.log(e.Message , "ErrorReporter", LogType.Error);
+			this.log(e.StackTrace, "ErrorReporter", LogType.Error);
+			this.log(fileLineNumber+":"+ fileColumnNumber + "@" + fileName, "ErrorReporter", LogType.Error);
+			this.log("##[ERROR]##", "ErrorReporter", LogType.Error);
 		}
 
-		public void log(string msg, string tag)
+		/// <summary>
+		/// Call this method if you need log a text in runtime
+		/// </summary>
+		/// <param name="message">Message of your log</param>
+		/// <param name="tag">Who is logging?</param>
+		/// <param name="type">what type of log is this?</param>
+		public void log(string message, string tag, LogType type = LogType.Log)
 		{
-			string logMessage = "[" + tag + "]: " + msg;
-			Console.WriteLine(logMessage);
-			logFile.AppendText(logMessage+"\n");
+			this.logs.Enqueue(new Log(message, tag, type));
 		}
 
+		/// <summary>
+		/// The simplest way to log something
+		/// </summary>
+		/// <param name="msg">Your log message</param>
 		public void log(string msg)
 		{
 			this.log(msg, "Unkwn");
 		}
 
-		private void tryLogCustom(string msg, string tag, LogType type)
+		/// <summary>
+		/// Execute this method if you want to proccess log queue. ONLY IS USED FOR MODLOADER, so you don't need call in your mod
+		/// </summary>
+		public void proccessQueue()
 		{
-			bool flag = this.logCustom == null;
-			if (flag)
+			Queue<Log> obj = this.logs;
+			lock (obj)
 			{
-				this.log(msg, tag);
-			}
-			else
-			{
-				msg = "[" + tag + "]: " + msg;
-				try
+				while (this.logs.Count > 0)
 				{
-					this.logCustom(msg, type);
-				}
-				catch (Exception e)
-				{
-					this.logError(e);
+					Log log = this.logs.Dequeue();
+					this.logFile.AppendText(log.getLogMessage() + "\n");
+					Console.WriteLine(log.getLogMessage());
 				}
 			}
 		}
 
-		private void tryLogCustom(string msg, LogType type)
+		
+
+	}
+
+	/// <summary>
+	/// This class is used to handler log queue
+	/// </summary>
+	class Log
+	{
+
+		private string message;
+		private string tag;
+		private LogType type;
+
+		public Log(string message,string tag, LogType type)
 		{
-			this.tryLogCustom(msg, "Unkwn", type);
+			this.message = message;
+			this.tag = tag;
+			this.type = type;
 		}
 
-		public void setLogger(Action<string, LogType> logfunc)
+		/// <summary>
+		/// Get the log messafe whit format
+		/// </summary>
+		/// <returns>log message</returns>
+		public string getLogMessage()
 		{
-			this.logCustom = logfunc;
+			string[] logText = { "[", this.type.ToString(), "] [", this.tag, "]: ", this.message };
+			return string.Concat(logText);
 		}
-
-		private const int SW_HIDE = 0;
-
-		private const int SW_SHOW = 5;
-
-		private bool visible = false;
-
-
-		private Action<string, LogType> logCustom;
 	}
 }
